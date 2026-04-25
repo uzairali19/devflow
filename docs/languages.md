@@ -157,6 +157,40 @@ devflow doctor
 Fails (exit 1) if mise is installed but not activated, or if `node` /
 `python` resolves through `~/.nvm` / `~/.pyenv` while mise is present.
 
+### CA root certificate "Permission denied" warnings during `mise install`
+
+On some Linux servers (notably Ubuntu boxes that have hosted other apps),
+`mise install` prints lines like:
+
+```text
+Error loading CA root certificate: failed to read PEM from file:
+  Permission denied at /etc/ssl/certs/caddy-internal.pem
+```
+
+This is almost always non-fatal:
+
+- mise iterates the certs in `/etc/ssl/certs/` to build its TLS trust
+  store. If one cert file (or symlink target) isn't world-readable, mise
+  warns and skips it.
+- If your install actually completed (`mise current` shows the
+  versions), TLS is working — the warning is noise.
+
+When to investigate:
+
+- TLS errors during `mise install` itself (downloads failing).
+- Later `mise install <tool>` failing with certificate errors.
+
+In that case, inspect permissions and stale symlinks:
+
+```sh
+ls -lL /etc/ssl/certs/ 2>&1 | grep -E 'denied|No such'
+sudo find /etc/ssl/certs -xtype l        # broken symlinks
+```
+
+Fix permissions on the offending file (typically `chmod a+r`) or remove
+the broken symlink. Don't bulk-`chmod` the whole directory — some
+private keys live there and need to stay restricted.
+
 ### `~/.zshrc.local` putting nvm/pyenv back on PATH
 
 `~/.zshrc.local` is sourced last so it can override anything. If it

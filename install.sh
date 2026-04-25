@@ -157,8 +157,9 @@ mkdir -p "$HOME/.local/bin"
 ln -sfn "$DEVFLOW_ROOT/bin/devflow" "$HOME/.local/bin/devflow"
 ok "$HOME/.local/bin/devflow"
 
-log "healthcheck"
-bash "$DEVFLOW_ROOT/scripts/healthcheck.sh" || warn "some tools missing (see above)"
+log "healthcheck (pre-reload)"
+DEVFLOW_PREINSTALL=1 bash "$DEVFLOW_ROOT/scripts/healthcheck.sh" || \
+  warn "some tools missing (see above)"
 
 # Seed ~/.zshrc.local from the example if the user doesn't have one.
 # Never overwrite — this file holds secrets.

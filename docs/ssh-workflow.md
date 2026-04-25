@@ -82,3 +82,42 @@ devflow update
 ```
 
 `git pull --ff-only` then re-link configs.
+
+## Terminal: `xterm-ghostty` over SSH
+
+Ghostty is a local terminal — its terminfo entry (`xterm-ghostty`) lives
+on your laptop, not on the remote server. When you SSH from Ghostty, the
+remote shell inherits `TERM=xterm-ghostty`, but the remote system has
+never seen that entry, so tmux/less/vim throw:
+
+```text
+missing or unsuitable terminal: xterm-ghostty
+```
+
+devflow handles this automatically. Near the top of `configs/zsh/zshrc`:
+
+```sh
+if [[ "$TERM" == "xterm-ghostty" ]] && ! infocmp xterm-ghostty >/dev/null 2>&1; then
+  export TERM="xterm-256color"
+fi
+```
+
+The fallback only fires when the remote really lacks the entry. Hosts
+that *do* know `xterm-ghostty` (because you installed it there) keep
+the original.
+
+If you still see the error after a fresh shell, check what the shell
+actually sees:
+
+```sh
+echo "$TERM"
+infocmp "$TERM"
+```
+
+If `infocmp` says "Couldn't open terminfo file", either:
+
+- Your `~/.zshrc` isn't the devflow one (`readlink ~/.zshrc` should
+  point into the devflow repo). Re-run the installer.
+- Your shell hasn't reloaded since install. Run `exec zsh -l`.
+- You're in `bash`, not `zsh`. Switch shells or set `TERM=xterm-256color`
+  in `~/.bashrc` for the same reason.

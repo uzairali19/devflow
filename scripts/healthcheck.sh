@@ -59,10 +59,23 @@ done
 #   * shims on PATH (no precmd hook; shims_on_path: yes)
 # Either is fine. We only fail if NEITHER is true, or if a configured tool
 # fails to resolve through mise.
+#
+# Pre-reload mode: install.sh sets DEVFLOW_PREINSTALL=1 when running this
+# at the end of a fresh install. The shell that invoked install.sh hasn't
+# sourced the new zshrc yet, so node/python WILL still resolve to system
+# paths and shims_on_path WILL be no. In that mode we still print every
+# finding, but treat them as informational rather than failures — the user
+# is told to reload, not that something is broken.
 
+PREINSTALL="${DEVFLOW_PREINSTALL:-0}"
 mise_problems=0
 if command -v mise >/dev/null 2>&1; then
-  printf "\n   %smise%s\n" "${C_BOLD}" "${C_RESET}"
+  if [[ "$PREINSTALL" == "1" ]]; then
+    printf "\n   %smise%s %s(pre-reload check — values reflect the install shell, not your future zsh)%s\n" \
+      "${C_BOLD}" "${C_RESET}" "${C_DIM}" "${C_RESET}"
+  else
+    printf "\n   %smise%s\n" "${C_BOLD}" "${C_RESET}"
+  fi
 
   doctor_out="$(mise doctor 2>&1 || true)"
 
@@ -126,6 +139,13 @@ if (( failures > 0 )); then
 fi
 
 if (( mise_problems > 0 )); then
+  if [[ "$PREINSTALL" == "1" ]]; then
+    # Don't fail loudly during install — the next shell will be the one that
+    # has mise activated. Just hint at what to do next.
+    printf "\n   %s%d pre-reload notice(s)%s — expected before %sexec zsh -l%s\n" \
+      "${C_DIM}" "$mise_problems" "${C_RESET}" "${C_BOLD}" "${C_RESET}"
+    exit 0
+  fi
   printf "\n   %s%d mise problem(s)%s — see warnings above\n" "${C_YELLOW}" "$mise_problems" "${C_RESET}"
   exit 1
 fi

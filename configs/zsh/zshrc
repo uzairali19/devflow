@@ -1,6 +1,15 @@
 # ~/.zshrc — devflow
 # Secrets and host-specific overrides go in ~/.zshrc.local (sourced last).
 
+# ---------- terminal fallback (must run before tmux/mise/prompt) ------------
+# Ghostty sets TERM=xterm-ghostty locally. Remote servers reached via SSH
+# usually don't ship that terminfo entry, which makes tmux/less/vim throw
+# "missing or unsuitable terminal: xterm-ghostty". Fall back only when the
+# entry really isn't installed — never clobber a working TERM.
+if [[ "$TERM" == "xterm-ghostty" ]] && ! infocmp xterm-ghostty >/dev/null 2>&1; then
+  export TERM="xterm-256color"
+fi
+
 # ---------- PATH bootstrap (must run before mise check) ---------------------
 # Homebrew first; brew shellenv prepends /opt/homebrew/bin (or /usr/local/bin).
 if   [[ -x /opt/homebrew/bin/brew ]]; then eval "$(/opt/homebrew/bin/brew shellenv)"
