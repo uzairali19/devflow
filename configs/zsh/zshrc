@@ -120,6 +120,11 @@ zstyle ':completion:*' list-colors ''
 zstyle ':completion:*:descriptions' format '%F{yellow}-- %d --%f'
 
 bindkey -e
+# Consistent Backspace/Delete across SSH + tmux. Some terminals send ^?
+# for Backspace and others send ^H; bind both. Delete is ^[[3~.
+bindkey "^?"    backward-delete-char
+bindkey "^H"    backward-delete-char
+bindkey "^[[3~" delete-char
 
 # fzf keybindings
 for f in \

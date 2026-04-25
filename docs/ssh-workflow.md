@@ -121,3 +121,30 @@ If `infocmp` says "Couldn't open terminfo file", either:
 - Your shell hasn't reloaded since install. Run `exec zsh -l`.
 - You're in `bash`, not `zsh`. Switch shells or set `TERM=xterm-256color`
   in `~/.bashrc` for the same reason.
+
+## Backspace and Delete over SSH
+
+Some terminals send `^?` for Backspace and others send `^H`. Inside an
+SSH → tmux → zsh stack the wrong combination eats characters or does
+nothing. devflow's `zshrc` binds both:
+
+```sh
+bindkey "^?"    backward-delete-char
+bindkey "^H"    backward-delete-char
+bindkey "^[[3~" delete-char
+```
+
+If Backspace still misbehaves, see what the terminal is actually
+sending:
+
+```sh
+showkey -a
+# press Backspace → expect ^? or ^H
+# press Delete    → expect ^[[3~
+# press Ctrl-C twice to exit
+```
+
+If `showkey` shows something else (a stray `^[[127;5u`, etc.), the
+upstream emulator is sending a non-standard sequence. Set Ghostty's
+keybind for `backspace` back to default in `~/.config/ghostty/config`,
+or add a matching `bindkey` line to `~/.zshrc.local`.

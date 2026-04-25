@@ -18,6 +18,7 @@ if [[ -n "${TERM:-}" ]] && infocmp "$TERM" >/dev/null 2>&1; then
 else
   row "terminfo"   "missing — tmux/less/vim may fail with 'unsuitable terminal'"
 fi
+row "backspace"    "to verify, run: showkey -a  (Backspace should print ^? or ^H)"
 
 hr; echo "PATH (one entry per line, in order)"; hr
 printf '%s\n' "${PATH:-}" | tr ':' '\n' | nl -ba
