@@ -1,0 +1,57 @@
+# OS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+Thumbs.db
+desktop.ini
+
+# Editors
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+.nvim.lua
+
+# Local-only shell overrides (documented in docs/zsh.md)
+# IMPORTANT: never commit. Holds API keys and host-specific env.
+.zshrc.local
+.zshrc.local.*
+!configs/zsh/zshrc.local.example
+
+# Other local override patterns
+*.local
+!*.local.example
+
+# Backups created by devflow itself
+*.backup.devflow.*
+
+# Compiled / generated
+*.zwc
+*.pyc
+__pycache__/
+.zcompdump*
+
+# Logs and temp
+*.log
+.tmp/
+.cache/
+
+# Secrets / env files (defense in depth)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+*.kdbx
+secrets/
+
+# Node / Python tooling that may land in the repo if anyone runs commands here
+node_modules/
+.npm/
+.pnpm-store/
+.venv/
+venv/

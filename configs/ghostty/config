@@ -1,0 +1,42 @@
+# Font (VERY important for coding + content)
+font-family = JetBrainsMono Nerd Font
+font-size = 14
+
+# Theme
+theme = Github Dark High Contrast
+
+# Cursor
+cursor-style = bar
+
+# Padding (more breathing room)
+window-padding-x = 16
+window-padding-y = 16
+
+# Scrollback (large for logs)
+scrollback-limit = 200000
+
+# Copy / paste (Mac muscle memory)
+keybind = super+c=copy_to_clipboard
+keybind = super+v=paste_from_clipboard
+
+# Splits
+keybind = super+d=new_split:right
+keybind = super+shift+d=new_split:down
+
+# Navigation between splits
+keybind = super+h=goto_split:left
+keybind = super+l=goto_split:right
+keybind = super+k=goto_split:up
+keybind = super+j=goto_split:down
+
+# Close split
+keybind = super+w=close_surface
+
+# Make Option key act as Meta (for tmux)
+macos-option-as-alt = true
+
+# Opacity test
+
+background = #000000
+background-opacity = 0.75
+background-blur-radius = 30

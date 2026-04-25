@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# devflow — small CLI on top of the dotfiles.
+
+set -euo pipefail
+
+# Resolve the repo root by walking the symlink chain.
+_resolve_root() {
+  local src="${BASH_SOURCE[0]}"
+  while [[ -L "$src" ]]; do
+    local dir
+    dir="$(cd -P "$(dirname "$src")" && pwd)"
+    src="$(readlink "$src")"
+    [[ "$src" != /* ]] && src="$dir/$src"
+  done
+  cd -P "$(dirname "$src")/.." && pwd
+}
+DEVFLOW_ROOT="$(_resolve_root)"
+export DEVFLOW_ROOT
+
+cmd="${1:-help}"
+[[ $# -gt 0 ]] && shift || true
+
+usage() {
+  cat <<'USAGE'
+usage:
+  devflow session [name]    new or attach tmux session (default: $PWD basename)
+  devflow sessions          list sessions
+  devflow doctor            run healthcheck
+  devflow debug             dump PATH and version-manager state for triage
+  devflow update            git pull + re-link
+  devflow path              print repo root
+  devflow help              show this
+USAGE
+}
+
+require_tmux() {
+  command -v tmux >/dev/null 2>&1 || { echo "devflow: tmux not installed" >&2; exit 1; }
+}
+
+slug() {
+  printf "%s" "$1" \
+    | tr '[:upper:]' '[:lower:]' \
+    | sed -E 's/[^a-z0-9_-]+/-/g; s/^-+|-+$//g' \
+    | cut -c1-32
+}
+
+cmd_session() {
+  require_tmux
+  local name
+  if [[ $# -gt 0 && -n "$1" ]]; then name="$(slug "$1")"; else name="$(slug "$(basename "$PWD")")"; fi
+  [[ -n "$name" ]] || name="work"
+
+  if [[ -n "${TMUX:-}" ]]; then
+    tmux has-session -t "$name" 2>/dev/null || tmux new-session -d -s "$name" -c "$PWD"
+    tmux switch-client -t "$name"
+  else
+    exec tmux new-session -A -s "$name" -c "$PWD"
+  fi
+}
+
+cmd_sessions() {
+  require_tmux
+  tmux ls 2>/dev/null || echo "(no sessions)"
+}
+
+cmd_doctor() { bash "$DEVFLOW_ROOT/scripts/healthcheck.sh"; }
+
+cmd_debug()  { bash "$DEVFLOW_ROOT/scripts/debug-path.sh"; }
+
+cmd_update() {
+  command -v git >/dev/null 2>&1 || { echo "devflow: git required" >&2; exit 1; }
+  echo "==> git pull"
+  git -C "$DEVFLOW_ROOT" pull --ff-only
+  echo "==> re-link configs"
+  bash "$DEVFLOW_ROOT/scripts/link-configs.sh"
+}
+
+cmd_path() { printf "%s\n" "$DEVFLOW_ROOT"; }
+
+case "$cmd" in
+  session)        cmd_session "$@" ;;
+  sessions|ls)    cmd_sessions ;;
+  doctor|health)  cmd_doctor ;;
+  debug)          cmd_debug ;;
+  update)         cmd_update ;;
+  path|root)      cmd_path ;;
+  help|-h|--help) usage ;;
+  *)              usage; exit 1 ;;
+esac

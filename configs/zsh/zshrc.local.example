@@ -1,0 +1,26 @@
+# ~/.zshrc.local
+#
+# Copy this to ~/.zshrc.local and edit. devflow's main zshrc sources it
+# at the very end. This file is git-ignored and never tracked.
+#
+# Use it for:
+#   - API keys and tokens
+#   - work-only env (AWS_PROFILE, kubeconfig paths, ...)
+#   - machine-specific PATH entries
+#   - aliases or functions that don't belong in the shared config
+
+# ---- secrets (placeholders only — never commit real values) ----
+# export OPENAI_API_KEY=""
+# export ANTHROPIC_API_KEY=""
+# export GITHUB_TOKEN=""
+
+# ---- work env ----
+# export AWS_PROFILE="staging"
+# export KUBECONFIG="$HOME/.kube/work-config"
+
+# ---- machine paths ----
+# export PATH="$HOME/.cargo/bin:$PATH"
+
+# ---- aliases ----
+# alias k='kubectl'
+# alias work='cd ~/code/work'

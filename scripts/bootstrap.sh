@@ -1,0 +1,213 @@
+#!/usr/bin/env bash
+# devflow bootstrap — public one-line installer.
+#
+# Usage:
+#   curl -fsSL https://raw.githubusercontent.com/uzairali19/devflow/main/scripts/bootstrap.sh | bash
+#
+# Or with overrides:
+#   DEVFLOW_DIR=$HOME/.devflow DEVFLOW_BRANCH=dev curl -fsSL ... | bash
+#
+# Steps:
+#   1. install base packages (build-essential, curl, git, ca-certificates)
+#   2. clone or update the devflow repo
+#   3. hand off to ./install.sh --remote --languages
+#
+# Self-contained: does not source other files (it runs from a curl pipe).
+
+set -euo pipefail
+
+# ---------- config ----------------------------------------------------------
+
+DEVFLOW_REPO_URL="${DEVFLOW_REPO_URL:-https://github.com/uzairali19/devflow.git}"
+DEVFLOW_DIR="${DEVFLOW_DIR:-$HOME/devflow}"
+DEVFLOW_BRANCH="${DEVFLOW_BRANCH:-main}"
+
+# ---------- logging ---------------------------------------------------------
+
+if [[ -t 1 ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_BLUE=$'\033[34m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_RED=$'\033[31m'
+else
+  C_RESET=""; C_BOLD=""; C_DIM=""; C_BLUE=""; C_GREEN=""; C_YELLOW=""; C_RED=""
+fi
+
+info() { printf "%s==>%s %s\n"  "${C_BLUE}${C_BOLD}" "${C_RESET}" "$*"; }
+ok()   { printf "%s ok %s %s\n" "${C_GREEN}"        "${C_RESET}" "$*"; }
+warn() { printf "%s !  %s %s\n" "${C_YELLOW}"       "${C_RESET}" "$*"; }
+die()  { printf "%s x  %s %s\n" "${C_RED}"          "${C_RESET}" "$*" >&2; exit 1; }
+
+# ---------- sudo helper -----------------------------------------------------
+
+SUDO=""
+if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
+  if command -v sudo >/dev/null 2>&1; then
+    SUDO="sudo"
+  fi
+fi
+
+run_as_root() {
+  if [[ -n "$SUDO" ]]; then
+    sudo "$@"
+  else
+    "$@"
+  fi
+}
+
+require_root_capable() {
+  if [[ "${EUID:-$(id -u)}" -ne 0 && -z "$SUDO" ]]; then
+    die "this step needs root and sudo is not installed. Re-run as root or install sudo."
+  fi
+}
+
+# ---------- detect OS -------------------------------------------------------
+
+detect_os() {
+  case "$(uname -s)" in
+    Darwin) OS="macos"; DISTRO=""; return ;;
+    Linux)  OS="linux" ;;
+    *)      die "unsupported kernel: $(uname -s)" ;;
+  esac
+
+  if [[ -r /etc/os-release ]]; then
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    DISTRO="${ID:-}"
+    DISTRO_LIKE="${ID_LIKE:-}"
+  else
+    die "cannot read /etc/os-release; unsupported Linux"
+  fi
+}
+
+# ---------- install base deps ----------------------------------------------
+
+install_base_debian() {
+  require_root_capable
+  info "apt-get update"
+  run_as_root apt-get update -y
+  info "apt-get install build-essential curl git ca-certificates"
+  run_as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    build-essential curl git ca-certificates
+}
+
+install_base_redhat() {
+  require_root_capable
+  local pm=""
+  if   command -v dnf >/dev/null 2>&1; then pm="dnf"
+  elif command -v yum >/dev/null 2>&1; then pm="yum"
+  else die "no dnf or yum on this RedHat-family system"
+  fi
+  info "$pm install gcc make curl git ca-certificates"
+  run_as_root "$pm" install -y gcc gcc-c++ make curl git ca-certificates
+}
+
+install_base_macos() {
+  # Git ships with Xcode Command Line Tools. curl is in /usr/bin.
+  # Don't install Homebrew here — install.sh --local does that. For --remote
+  # mode on macOS, we just need git and curl to be present.
+  if ! command -v git >/dev/null 2>&1; then
+    info "git missing — triggering Xcode Command Line Tools install"
+    xcode-select --install || true
+    die "re-run bootstrap after the Command Line Tools install completes"
+  fi
+  ok "git and curl present"
+}
+
+install_base() {
+  case "$OS" in
+    macos) install_base_macos ;;
+    linux)
+      case "$DISTRO" in
+        ubuntu|debian|raspbian|pop|linuxmint|kali)
+          install_base_debian
+          ;;
+        rhel|centos|rocky|almalinux|fedora|amzn)
+          install_base_redhat
+          ;;
+        *)
+          # Try ID_LIKE as a hint.
+          case "$DISTRO_LIKE" in
+            *debian*) install_base_debian ;;
+            *rhel*|*fedora*) install_base_redhat ;;
+            *) die "Linux distro '$DISTRO' is not supported by bootstrap. Install git/curl/build tools manually, then run install.sh --remote --languages." ;;
+          esac
+          ;;
+      esac
+      ;;
+  esac
+}
+
+# ---------- clone or update devflow ----------------------------------------
+
+clone_or_update() {
+  if [[ -d "$DEVFLOW_DIR" ]]; then
+    if [[ -d "$DEVFLOW_DIR/.git" ]]; then
+      info "devflow exists at $DEVFLOW_DIR — updating"
+      git -C "$DEVFLOW_DIR" fetch --quiet origin "$DEVFLOW_BRANCH"
+      git -C "$DEVFLOW_DIR" checkout --quiet "$DEVFLOW_BRANCH"
+      git -C "$DEVFLOW_DIR" pull --ff-only --quiet
+      ok "updated"
+    else
+      die "$DEVFLOW_DIR exists and is not a git repo. Move/delete it, or set DEVFLOW_DIR=<other path> and re-run."
+    fi
+  else
+    info "cloning $DEVFLOW_REPO_URL (branch: $DEVFLOW_BRANCH) -> $DEVFLOW_DIR"
+    git clone --branch "$DEVFLOW_BRANCH" --quiet "$DEVFLOW_REPO_URL" "$DEVFLOW_DIR"
+    ok "cloned"
+  fi
+}
+
+# ---------- ensure executable bits -----------------------------------------
+
+ensure_executable() {
+  chmod +x "$DEVFLOW_DIR/install.sh"        2>/dev/null || true
+  chmod +x "$DEVFLOW_DIR/scripts/"*.sh      2>/dev/null || true
+  chmod +x "$DEVFLOW_DIR/bin/devflow"       2>/dev/null || true
+}
+
+# ---------- run installer --------------------------------------------------
+
+run_installer() {
+  info "handoff -> ./install.sh --remote --languages"
+  cd "$DEVFLOW_DIR"
+  ./install.sh --remote --languages
+}
+
+# ---------- main -----------------------------------------------------------
+
+main() {
+  printf "%sdevflow bootstrap%s\n" "${C_BOLD}" "${C_RESET}"
+  printf "%s  repo  %s %s\n"       "${C_DIM}" "${C_RESET}" "$DEVFLOW_REPO_URL"
+  printf "%s  dir   %s %s\n"       "${C_DIM}" "${C_RESET}" "$DEVFLOW_DIR"
+  printf "%s  branch%s %s\n"       "${C_DIM}" "${C_RESET}" "$DEVFLOW_BRANCH"
+
+  info "detect OS"
+  detect_os
+  ok "OS=$OS${DISTRO:+ DISTRO=$DISTRO}"
+
+  info "install base packages"
+  install_base
+
+  info "clone or update devflow"
+  clone_or_update
+
+  info "ensure scripts are executable"
+  ensure_executable
+
+  run_installer
+
+  cat <<NEXT
+
+devflow installed.
+
+Your current shell has not reloaded the new zsh config yet.
+
+Next:
+  exec zsh -l
+  devflow doctor
+  devflow debug
+  tmux new -s main
+
+NEXT
+}
+
+main "$@"

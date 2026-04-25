@@ -1,0 +1,11 @@
+# Global mise config. Symlinked to ~/.config/mise/config.toml.
+# Override per-project with a .mise.toml at the project root.
+
+[tools]
+node = "lts"
+python = "3.12"
+go = "latest"
+rust = "stable"
+
+[settings]
+experimental = true
