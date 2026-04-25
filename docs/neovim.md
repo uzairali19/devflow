@@ -51,8 +51,30 @@ right order.
 
 ## Languages out of the box
 
-LSP (via Mason): `lua_ls`, `ts_ls` (TypeScript + React), `gopls`,
-`pyright`, `rust_analyzer`, `bashls`, `jsonls`, `yamlls`, `marksman`.
+**Targets Neovim 0.11+.** LSP setup uses `vim.lsp.config()` + `vim.lsp.enable()`
+directly — the deprecated `require('lspconfig').<name>.setup()` path is
+not used (it triggers a deprecation warning that mentions `"framework"`).
+
+LSP servers (installed by Mason):
+
+| Server          | Languages                            |
+| --------------- | ------------------------------------ |
+| `lua_ls`        | Lua                                  |
+| `ts_ls`         | TypeScript, JavaScript, React (.tsx) |
+| `gopls`         | Go                                   |
+| `pyright`       | Python                               |
+| `rust_analyzer` | Rust                                 |
+| `bashls`        | Bash, sh                             |
+| `jsonls`        | JSON                                 |
+| `yamlls`        | YAML                                 |
+| `html`          | HTML                                 |
+| `cssls`         | CSS                                  |
+| `tailwindcss`   | Tailwind class completion            |
+
+Each server is set up under `pcall`, so a missing or renamed server
+warns once (`devflow: LSP <name> skipped — ...`) without breaking
+startup. The `ts_ls` ↔ `tsserver` rename is auto-detected from the
+runtime path.
 
 Formatters (via Mason + conform): `stylua`, `prettier`, `shfmt`,
 `gofumpt`, `goimports`, `ruff` (also handles import sort).
@@ -189,6 +211,38 @@ nvim --headless "+TSUpdate"    +qa
 - First Mason install on a server is slow (downloads each LSP binary).
   Use `:Mason` to inspect progress, `:checkhealth mason` if anything
   looks stuck.
+
+## Troubleshooting
+
+### `module 'nvim-treesitter.configs' not found`
+
+You ended up with an old checkout of nvim-treesitter's `main` branch
+(the new architecture, no `configs` module). devflow pins the plugin to
+`master`, but a previously cached checkout can be sticky. Reset it:
+
+```sh
+rm -rf ~/.local/share/nvim/lazy/nvim-treesitter
+nvim --headless "+Lazy! sync" +qa
+```
+
+The config also wraps `require('nvim-treesitter.configs')` in `pcall`,
+so even if this happens again the rest of nvim still starts and you'll
+see a notification telling you what to run.
+
+### Generic "lazy state looks weird"
+
+```sh
+rm -rf ~/.local/share/nvim/lazy ~/.local/share/nvim/lazy-rocks
+nvim --headless "+Lazy! sync" +qa
+```
+
+Mason data is separate (`~/.local/share/nvim/mason/`), so this won't
+re-download LSP binaries.
+
+### LSP server reported as "not executable"
+
+Mason hasn't finished installing it. Check `:Mason` for status. On a
+fresh box, give it a minute on first launch.
 
 ## Editing the config
 

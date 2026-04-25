@@ -85,20 +85,42 @@ return {
   },
 
   -- ---------- treesitter ----------------------------------------------------
+  -- Pinned to master. nvim-treesitter's `main` branch is the new
+  -- architecture and drops the `nvim-treesitter.configs` module that
+  -- this spec relies on; master stays stable.
+  --
+  -- If startup ever errors with "module 'nvim-treesitter.configs' not
+  -- found", clear the cached checkout:
+  --   rm -rf ~/.local/share/nvim/lazy/nvim-treesitter
+  --   nvim --headless "+Lazy! sync" +qa
   {
     'nvim-treesitter/nvim-treesitter',
-    build = ':TSUpdate',
-    main  = 'nvim-treesitter.configs',
-    opts  = {
-      ensure_installed = {
-        'bash', 'css', 'go', 'html', 'javascript', 'json', 'lua',
-        'markdown', 'markdown_inline', 'python', 'rust', 'tsx',
-        'typescript', 'vim', 'vimdoc', 'yaml',
-      },
-      auto_install = true,
-      highlight    = { enable = true, additional_vim_regex_highlighting = false },
-      indent       = { enable = true },
-    },
+    branch = 'master',
+    build  = ':TSUpdate',
+    config = function()
+      local ok, configs = pcall(require, 'nvim-treesitter.configs')
+      if not ok then
+        vim.schedule(function()
+          vim.notify(
+            'nvim-treesitter.configs not loadable. Try:\n' ..
+            '  rm -rf ~/.local/share/nvim/lazy/nvim-treesitter\n' ..
+            '  nvim --headless "+Lazy! sync" +qa',
+            vim.log.levels.WARN)
+        end)
+        return
+      end
+
+      configs.setup({
+        ensure_installed = {
+          'bash', 'css', 'go', 'gomod', 'html', 'javascript', 'json',
+          'lua', 'markdown', 'markdown_inline', 'python', 'rust', 'tsx',
+          'typescript', 'vim', 'vimdoc', 'yaml',
+        },
+        auto_install = true,
+        highlight    = { enable = true, additional_vim_regex_highlighting = false },
+        indent       = { enable = true },
+      })
+    end,
   },
 
   -- ---------- mason: install LSP / formatter binaries -----------------------
@@ -116,27 +138,48 @@ return {
       'hrsh7th/cmp-nvim-lsp',
     },
     config = function()
-      -- Server names follow nvim-lspconfig's current naming.
-      -- ts_ls (was tsserver) covers TypeScript and React (.tsx).
+      -- Targets Neovim 0.11+. Uses vim.lsp.config / vim.lsp.enable so the
+      -- deprecated `require('lspconfig').<name>.setup()` path is never hit
+      -- (it triggers a warning that prints "framework" as a placeholder).
+      -- nvim-lspconfig is still loaded — it provides the per-server
+      -- defaults (cmd, root markers, filetypes) under its lsp/ directory.
+      --
+      -- Pick the right TS server name. Newer nvim-lspconfig provides ts_ls;
+      -- the renamed tsserver is gone. Detect what the runtime actually has.
+      local function pick_ts_server()
+        if #vim.api.nvim_get_runtime_file('lsp/ts_ls.lua', false) > 0 then
+          return 'ts_ls'
+        end
+        if #vim.api.nvim_get_runtime_file('lsp/tsserver.lua', false) > 0 then
+          return 'tsserver'
+        end
+        return 'ts_ls'  -- best guess; pcall below will swallow if missing
+      end
+
       local servers = {
-        lua_ls        = {
+        lua_ls = {
           settings = {
             Lua = { workspace = { checkThirdParty = false }, telemetry = { enable = false } },
           },
         },
-        ts_ls         = {},
         gopls         = {},
         pyright       = {},
         rust_analyzer = {},
         bashls        = {},
         jsonls        = {},
         yamlls        = {},
-        marksman      = {},
+        html          = {},
+        cssls         = {},
+        tailwindcss   = {},
       }
+      servers[pick_ts_server()] = {}
 
       require('mason').setup()
       require('mason-lspconfig').setup({
         ensure_installed = vim.tbl_keys(servers),
+        -- mason-lspconfig v2 auto-enables installed servers via vim.lsp.enable.
+        -- We do that ourselves below so the config is explicit and pcall-safe.
+        automatic_enable = false,
       })
 
       require('mason-tool-installer').setup({
@@ -152,10 +195,24 @@ return {
         capabilities = cmp_lsp.default_capabilities(capabilities)
       end
 
-      local lspconfig = require('lspconfig')
-      for name, cfg in pairs(servers) do
+      -- Configure + enable every server. A missing lsp/<name>.lua file (or
+      -- a typo) only warns — it never breaks startup.
+      local function setup_server(name, cfg)
         cfg.capabilities = vim.tbl_deep_extend('force', {}, capabilities, cfg.capabilities or {})
-        lspconfig[name].setup(cfg)
+        local ok, err = pcall(function()
+          vim.lsp.config(name, cfg)
+          vim.lsp.enable(name)
+        end)
+        if not ok then
+          vim.schedule(function()
+            vim.notify(('devflow: LSP %s skipped — %s'):format(name, err),
+              vim.log.levels.WARN)
+          end)
+        end
+      end
+
+      for name, cfg in pairs(servers) do
+        setup_server(name, cfg)
       end
 
       -- Per-buffer keymaps when an LSP attaches.
