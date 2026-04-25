@@ -49,6 +49,18 @@ right order.
 | stevearc/conform.nvim                   | Format-on-save runner                         |
 | christoomey/vim-tmux-navigator          | `Ctrl-hjkl` across nvim splits + tmux panes   |
 
+## Treesitter: pinned to `master` (v1 stability decision)
+
+devflow pins `nvim-treesitter` to `branch = 'master'`. Upstream's new
+default is `main`, which is a full architectural rewrite and **does not
+expose** `require('nvim-treesitter.configs')` — the API every
+Kickstart-style config (including this one) relies on.
+
+For v1 we want stability over staying on the bleeding edge. Migrating to
+the new `main`-branch API is a deliberate later change, not an
+accidental one. If you ever drop the pin, expect to also rewrite the
+treesitter setup block.
+
 ## Languages out of the box
 
 **Targets Neovim 0.11+.** LSP setup uses `vim.lsp.config()` + `vim.lsp.enable()`
