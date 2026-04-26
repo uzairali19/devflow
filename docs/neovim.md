@@ -169,6 +169,11 @@ K               hover docs
 <leader>w       :w
 <leader>q       close current buffer; opens Oil if it was the last buffer
 <Esc>           clear search highlight
+j / k           move by wrapped visual line (good for markdown/mdx)
+gj / gk         move by real file line (the original behavior)
+0               start of line
+^               first non-space character
+$               end of line
 <C-d>/<C-u>     half-page jump (centered)
 n / N           next / prev match (centered)
 < / > (visual)  indent and keep selection
@@ -262,6 +267,30 @@ re-download LSP binaries.
 
 Mason hasn't finished installing it. Check `:Mason` for status. On a
 fresh box, give it a minute on first launch.
+
+## Writing prose (markdown / mdx)
+
+Soft wrap is on globally — long paragraphs flow visually inside the
+window without inserting hard line breaks into the file.
+
+```text
+:set wrap         visual wrapping (on)
+:set linebreak    don't break in the middle of a word
+:set breakindent  wrapped lines keep the original indent
+```
+
+Movement keys are tuned for prose:
+
+```text
+j / k       move down/up by wrapped visual line
+gj / gk     move by real file line (the original behavior)
+0           start of line
+^           first non-space character
+$           end of line
+```
+
+If you're editing fixed-width source and want the original line-by-line
+behavior back temporarily, `:set nowrap` and use `gj`/`gk` directly.
 
 ## Providers and `:checkhealth`
 

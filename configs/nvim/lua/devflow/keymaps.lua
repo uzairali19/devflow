@@ -36,6 +36,14 @@ map('n', '<C-u>', '<C-u>zz')
 map('n', 'n',     'nzzzv')
 map('n', 'N',     'Nzzzv')
 
+-- j/k move by visual line so wrapped paragraphs feel right when writing
+-- markdown/mdx. Use gj / gk if you ever need the original "real line"
+-- behavior. 0, ^, $ are intentionally NOT remapped.
+map('n', 'j', 'gj', { desc = 'down (visual line)' })
+map('n', 'k', 'gk', { desc = 'up (visual line)' })
+map('v', 'j', 'gj', { desc = 'down (visual line)' })
+map('v', 'k', 'gk', { desc = 'up (visual line)' })
+
 -- keep selection on indent
 map('v', '<', '<gv')
 map('v', '>', '>gv')

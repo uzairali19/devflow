@@ -9,8 +9,12 @@ opt.cursorline     = true
 opt.signcolumn     = 'yes'
 opt.scrolloff      = 8
 opt.sidescrolloff  = 8
-opt.wrap           = false
+-- Soft-wrap on by default for long-form writing (markdown, mdx, prose).
+-- linebreak avoids breaking mid-word; breakindent keeps wrapped lines
+-- aligned with the original indent. j/k below move by visual line.
+opt.wrap           = true
 opt.linebreak      = true
+opt.breakindent    = true
 opt.termguicolors  = true
 opt.showmode       = false   -- statusline shows it
 opt.laststatus     = 3
