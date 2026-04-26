@@ -126,6 +126,13 @@ g?  (in Oil)    show all Oil keymaps
 Oil treats a directory as a buffer. Edit it like text and `:w` to apply
 file/folder changes.
 
+In devflow, Neovim *buffers* are the files you have open. Oil is the
+project explorer you fall back to when nothing is open. The recommended
+way to close a file is `<leader>q` — it switches to the previous buffer
+and deletes the one you just left. If that was the last file, it opens
+Oil instead of leaving you in a `[No Name]` buffer. Use `:bd` directly
+if you want plain stock behavior.
+
 ### LSP (set per-buffer when an LSP attaches)
 
 ```text
@@ -160,7 +167,7 @@ K               hover docs
 
 ```text
 <leader>w       :w
-<leader>q       :q
+<leader>q       close current buffer; opens Oil if it was the last buffer
 <Esc>           clear search highlight
 <C-d>/<C-u>     half-page jump (centered)
 n / N           next / prev match (centered)
@@ -255,6 +262,91 @@ re-download LSP binaries.
 
 Mason hasn't finished installing it. Check `:Mason` for status. On a
 fresh box, give it a minute on first launch.
+
+## Providers and `:checkhealth`
+
+`:checkhealth provider` lists nvim's optional language-runtime hooks.
+devflow disables the ones we don't use so the warnings disappear and
+startup gets a touch faster.
+
+| Provider     | devflow setting                  | Why                                         |
+| ------------ | -------------------------------- | ------------------------------------------- |
+| Perl         | `vim.g.loaded_perl_provider = 0` | No plugin needs it                          |
+| Node         | `vim.g.loaded_node_provider = 0` | We have zero `rplugin-node` plugins         |
+| Ruby         | `vim.g.loaded_ruby_provider = 0` | Same                                        |
+| Python (3)   | enabled                          | Useful for some LSP/format paths            |
+
+Warnings that are safe to ignore as a result:
+
+- `Missing neovim npm package` — node provider is off.
+- `Perl provider missing` — perl provider is off.
+- The Ruby warning if it appears.
+
+If you still see "pynvim not installed" under the Python section and
+want to silence it, install pynvim into the active mise Python:
+
+```sh
+mise current python                   # confirm which python is active
+python -m pip install --user pynvim
+```
+
+`python -m pip install --user pynvim` writes to that python's user
+site-packages, which is the one nvim's Python provider will pick up.
+
+### Clipboard
+
+| Environment              | Strategy                                    |
+| ------------------------ | ------------------------------------------- |
+| Local macOS              | nvim auto-detects `pbcopy`/`pbpaste`        |
+| Local Linux (Wayland)    | `wl-clipboard`                              |
+| Local Linux (X11)        | `xclip` or `xsel`                           |
+| **SSH from Ghostty/etc** | OSC52 (configured in `options.lua`)         |
+
+The OSC52 path is set up end-to-end by the installer, no manual steps:
+
+- nvim: `vim.g.clipboard` → OSC52 provider when `$SSH_TTY` is set
+  (`configs/nvim/lua/devflow/options.lua`)
+- tmux: `set -g set-clipboard on` (`configs/tmux/tmux.conf`)
+- tmux ≥ 3.2: `install-packages.sh` checks the apt-installed version and
+  **builds tmux from source into `~/.local/bin/` automatically** if the
+  distro ships an older one (Ubuntu 20.04 and earlier).
+- terminal: Ghostty allows OSC52 by default
+
+On a remote Linux server with no graphical session, `xclip` and `xsel`
+talk to the *server's* (non-existent) X clipboard, **not** your Mac's
+clipboard. They are not a workaround. OSC52 is the only thing that
+carries yanks from a headless server back to your laptop's clipboard.
+
+Test the SSH path end to end:
+
+```text
+local Mac            ssh box
+                     tmux new -s test
+                     nvim somefile.txt
+                     # press: yy   (yank current line)
+back on the Mac      ⌘V into any app    -> the line should paste
+```
+
+If it doesn't paste:
+
+```vim
+:lua print(vim.g.clipboard and vim.g.clipboard.name or '(default)')
+" expect: OSC52      (means the SSH branch in options.lua activated)
+:checkhealth provider
+```
+
+And on the remote shell:
+
+```sh
+echo "$SSH_TTY"        # non-empty
+echo "$TMUX"           # non-empty if you're inside tmux
+tmux -V                # need >= 3.2
+tmux show -gv set-clipboard   # expect: on
+```
+
+If `set-clipboard` is anything other than `on`, your tmux is older than
+the devflow conf, or you have a personal `~/.tmux.conf` overriding it
+later.
 
 ## Editing the config
 

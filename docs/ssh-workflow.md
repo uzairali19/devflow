@@ -57,12 +57,42 @@ makes second-and-later `ssh box` calls instant.
 
 ## Clipboard
 
-`y` in tmux copy mode runs `pbcopy` on macOS, `wl-copy` or `xclip` on
-Linux. Otherwise the selection lands in tmux's buffer — paste with
-`prefix ]`.
+Two paths, both wired up by devflow:
 
-If your local terminal supports OSC52 (Ghostty does), the clipboard
-works through SSH without forwarding anything.
+**tmux copy mode** (`prefix [` then `v`/`y`): `y` runs `pbcopy` on macOS,
+`wl-copy` or `xclip` on Linux. On a remote with none of those, the
+selection lands in tmux's buffer; paste with `prefix ]`.
+
+**nvim yank** (`y$`, `yy`, `"+y`, etc.): inside nvim the chain is
+
+```text
+nvim yank → OSC52 escape → tmux → ssh → local terminal → OS clipboard
+```
+
+devflow ensures every link works:
+
+- `configs/nvim/lua/devflow/options.lua` sets `vim.g.clipboard` to the
+  OSC52 provider when `$SSH_TTY` is set, so yanks emit OSC52 instead of
+  trying to find pbcopy/xclip on the remote.
+- `configs/tmux/tmux.conf` sets `set-clipboard on` so tmux forwards
+  OSC52 to the outer terminal.
+- Ghostty advertises OSC52 read/write by default — no config needed.
+
+Verify:
+
+```vim
+:checkhealth provider
+:lua print(vim.g.clipboard and vim.g.clipboard.name or '(default)')
+```
+
+`OSC52` means it's wired. Then `y$` in nvim → ⌘V on your laptop should
+work.
+
+tmux ≥ 3.2 is required for the OSC52 forward. devflow's
+`install-packages.sh` checks the installed tmux version and, on Linux
+distros that ship an older one (Ubuntu 20.04 and earlier),
+automatically builds a recent tmux into `~/.local/bin/`. No manual
+upgrade.
 
 ## Editing remote files
 

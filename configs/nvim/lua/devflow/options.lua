@@ -46,9 +46,38 @@ opt.swapfile    = false
 opt.backup      = false
 opt.confirm     = true
 
--- system clipboard. Deferred so a missing clipboard provider on a remote
--- box doesn't slow startup. Yanks reach the local clipboard via OSC52 when
--- the terminal supports it (Ghostty does).
-vim.schedule(function()
-  vim.opt.clipboard = 'unnamedplus'
-end)
+-- ---------- providers ------------------------------------------------------
+-- Disable provider scripts devflow doesn't need. Each one nvim probes adds
+-- startup cost and a checkhealth warning if the runtime is missing.
+--   perl: no plugins use it.
+--   node: we don't use any rplugin-node plugins.
+--   ruby: never used.
+-- Python is left enabled (some LSP/formatters benefit from pynvim being
+-- available). To silence its checkhealth warning install pynvim into the
+-- mise-managed python:  python -m pip install --user pynvim
+vim.g.loaded_perl_provider = 0
+vim.g.loaded_node_provider = 0
+vim.g.loaded_ruby_provider = 0
+
+-- ---------- clipboard ------------------------------------------------------
+-- yank/paste hit the system clipboard.
+vim.opt.clipboard = 'unnamedplus'
+
+-- Over SSH the remote has no pbcopy/xclip, so nvim's auto-detection fails
+-- silently and yanks only land in the + register. Force the built-in OSC52
+-- provider so the escape sequence travels:
+--   nvim -> tmux -> ssh -> local terminal (Ghostty/iTerm/kitty) -> OS clipboard
+-- Requires:
+--   * nvim >= 0.10 (built-in vim.ui.clipboard.osc52)
+--   * tmux >= 3.2 with `set -g set-clipboard on` (devflow's tmux.conf has it)
+--   * a terminal that allows OSC52 writes (Ghostty does by default)
+if vim.env.SSH_TTY or vim.env.SSH_CONNECTION then
+  local ok, osc52 = pcall(require, 'vim.ui.clipboard.osc52')
+  if ok then
+    vim.g.clipboard = {
+      name  = 'OSC52',
+      copy  = { ['+'] = osc52.copy('+'),  ['*'] = osc52.copy('*') },
+      paste = { ['+'] = osc52.paste('+'), ['*'] = osc52.paste('*') },
+    }
+  end
+end

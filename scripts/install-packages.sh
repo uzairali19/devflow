@@ -10,6 +10,55 @@ source "$DEVFLOW_ROOT/scripts/detect-os.sh"
 say()  { printf "   %s\n" "$*"; }
 warn() { printf "   ! %s\n" "$*" >&2; }
 
+# Required for OSC52 clipboard passthrough (nvim -> tmux -> ssh -> terminal).
+# tmux 3.2 added the `set-clipboard on` semantics we rely on.
+TMUX_MIN_MAJOR=3
+TMUX_MIN_MINOR=2
+
+# Bumped manually when we want to roll forward.
+TMUX_SOURCE_VERSION="3.5a"
+
+tmux_version_ok() {
+  command -v tmux >/dev/null 2>&1 || return 1
+  local raw cleaned major minor
+  raw="$(tmux -V 2>/dev/null | awk '{print $2}')"
+  # "3.5a" -> "3.5", "3.2-rc1" -> "3.2"
+  cleaned="$(printf '%s' "$raw" | sed 's/[^0-9.].*$//')"
+  major="${cleaned%%.*}"
+  minor="${cleaned#*.}"
+  minor="${minor%%.*}"
+  [[ "$major" =~ ^[0-9]+$ && "$minor" =~ ^[0-9]+$ ]] || return 1
+  if (( major > TMUX_MIN_MAJOR )); then return 0; fi
+  if (( major == TMUX_MIN_MAJOR && minor >= TMUX_MIN_MINOR )); then return 0; fi
+  return 1
+}
+
+# Build a recent tmux into ~/.local/bin. Only called when the apt-installed
+# tmux is too old for OSC52. Build cost: ~30s on a 1-vCPU VPS.
+build_tmux_from_source() {
+  local SUDO="${1:-}"
+  say "building tmux ${TMUX_SOURCE_VERSION} from source (apt tmux too old for OSC52)"
+  $SUDO DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    libevent-dev libncurses-dev pkg-config bison make gcc
+
+  local workdir
+  workdir="$(mktemp -d)"
+  trap "rm -rf '$workdir'" RETURN
+
+  ( cd "$workdir" \
+    && curl -fsSL "https://github.com/tmux/tmux/releases/download/${TMUX_SOURCE_VERSION}/tmux-${TMUX_SOURCE_VERSION}.tar.gz" \
+       | tar xz \
+    && cd "tmux-${TMUX_SOURCE_VERSION}" \
+    && ./configure --prefix="$HOME/.local" >/dev/null \
+    && make -j"$(nproc)" >/dev/null \
+    && make install >/dev/null
+  )
+  # Make the new tmux discoverable for the rest of this script run.
+  export PATH="$HOME/.local/bin:$PATH"
+  hash -r 2>/dev/null || true
+  say "tmux $(tmux -V 2>/dev/null | awk '{print $2}') installed at ~/.local/bin/tmux"
+}
+
 install_macos() {
   if ! command -v brew >/dev/null 2>&1; then
     say "installing Homebrew"
@@ -42,6 +91,14 @@ install_macos() {
     say "brew install --cask ${missing_casks[*]}"
     brew install --cask "${missing_casks[@]}" || warn "cask install had errors"
   fi
+
+  # brew always ships a recent tmux; sanity check anyway so the contract is
+  # explicit (OSC52 needs ≥ 3.2).
+  if tmux_version_ok; then
+    say "tmux $(tmux -V | awk '{print $2}') ≥ ${TMUX_MIN_MAJOR}.${TMUX_MIN_MINOR} — OK for OSC52"
+  else
+    warn "brew tmux reports an unexpectedly old version; OSC52 may not work"
+  fi
 }
 
 install_linux_apt() {
@@ -71,6 +128,14 @@ install_linux_apt() {
 
   if ! command -v eza >/dev/null 2>&1; then
     $SUDO apt-get install -y eza >/dev/null 2>&1 || warn "eza not in apt on this release, skipping"
+  fi
+
+  # tmux ≥ 3.2 is mandatory for the OSC52 clipboard chain. apt's version is
+  # fine on Ubuntu 22.04+ and Debian 11+; older releases need a source build.
+  if tmux_version_ok; then
+    say "tmux $(tmux -V | awk '{print $2}') ≥ ${TMUX_MIN_MAJOR}.${TMUX_MIN_MINOR} — OK for OSC52"
+  else
+    build_tmux_from_source "$SUDO"
   fi
 }
 

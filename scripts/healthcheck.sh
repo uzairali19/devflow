@@ -45,6 +45,23 @@ for tool in "${REQUIRED[@]}"; do
   fi
 done
 
+# tmux ≥ 3.2 is required for OSC52 clipboard passthrough. install-packages.sh
+# builds a recent tmux from source on Linux when apt's version is too old, so
+# this is a verification step rather than a setup step.
+if command -v tmux >/dev/null 2>&1; then
+  tmux_raw="$(tmux -V 2>/dev/null | awk '{print $2}')"
+  tmux_clean="$(printf '%s' "$tmux_raw" | sed 's/[^0-9.].*$//')"
+  tmux_major="${tmux_clean%%.*}"
+  tmux_minor="${tmux_clean#*.}"; tmux_minor="${tmux_minor%%.*}"
+  if [[ "$tmux_major" =~ ^[0-9]+$ && "$tmux_minor" =~ ^[0-9]+$ ]] \
+     && { (( tmux_major > 3 )) || { (( tmux_major == 3 )) && (( tmux_minor >= 2 )); }; }; then
+    row "tmux ver" "${C_GREEN}${tmux_raw}${C_RESET}" "≥ 3.2 — OSC52 ok"
+  else
+    row "tmux ver" "${C_RED}${tmux_raw}${C_RESET}" "< 3.2 — OSC52 clipboard will not work"
+    failures=$((failures + 1))
+  fi
+fi
+
 for tool in "${OPTIONAL[@]}"; do
   if path="$(resolve "$tool")"; then
     row "$tool" "${C_GREEN}ok${C_RESET}" "$path"

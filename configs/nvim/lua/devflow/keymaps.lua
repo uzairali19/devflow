@@ -7,9 +7,25 @@ local map = function(mode, lhs, rhs, opts)
     vim.tbl_extend('keep', opts or {}, { silent = true, noremap = true }))
 end
 
--- save / quit
+-- save
 map('n', '<leader>w', ':w<CR>', { desc = 'write' })
-map('n', '<leader>q', ':q<CR>', { desc = 'quit' })
+
+-- close buffer (or fall back to Oil if it's the last one). Avoids the
+-- empty [No Name] buffer that `:bd` leaves behind in Kickstart-style setups.
+vim.keymap.set('n', '<leader>q', function()
+  local buffers = vim.fn.getbufinfo({ buflisted = 1 })
+  if #buffers > 1 then
+    -- bp = previous buffer, bd # = delete the buffer we just left
+    vim.cmd('bp | bd #')
+  else
+    local ok, oil = pcall(require, 'oil')
+    if ok then
+      oil.open()
+    else
+      vim.cmd('enew')
+    end
+  end
+end, { silent = true, noremap = true, desc = 'close buffer or open Oil' })
 
 -- clear search highlight
 map('n', '<Esc>', ':nohlsearch<CR>')
