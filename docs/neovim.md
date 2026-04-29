@@ -67,6 +67,15 @@ treesitter setup block.
 directly — the deprecated `require('lspconfig').<name>.setup()` path is
 not used (it triggers a deprecation warning that mentions `"framework"`).
 
+devflow's `install-packages.sh` enforces this automatically. apt on
+Debian/Ubuntu ships much older Neovim (Ubuntu 22.04: 0.6, 24.04: 0.9,
+Debian 12: 0.7) — none of which has `vim.keymap` or `vim.lsp.config`.
+When apt's nvim is too old, devflow downloads the official Neovim
+release tarball from GitHub (`nvim-linux-x86_64.tar.gz` or
+`nvim-linux-arm64.tar.gz`) and installs it into `~/.local/nvim/`,
+linking the binary into `~/.local/bin/nvim`. macOS uses Homebrew which
+always ships a recent build.
+
 LSP servers (installed by Mason):
 
 | Server          | Languages                            |
@@ -270,8 +279,11 @@ fresh box, give it a minute on first launch.
 
 ## Writing prose (markdown / mdx)
 
-Soft wrap is on globally — long paragraphs flow visually inside the
-window without inserting hard line breaks into the file.
+Two layers of wrapping: **soft wrap** (visual only, on globally) and
+**hard wrap** (real newlines inserted as you type, on for prose
+filetypes).
+
+### Soft wrap — global
 
 ```text
 :set wrap         visual wrapping (on)
@@ -279,7 +291,31 @@ window without inserting hard line breaks into the file.
 :set breakindent  wrapped lines keep the original indent
 ```
 
-Movement keys are tuned for prose:
+### Hard wrap — markdown / mdx / text / gitcommit / asciidoc
+
+Auto-inserts a newline at column 80 as you type. Set up via a `FileType`
+autocmd in `keymaps.lua`:
+
+```text
+textwidth   = 80           wrap point
+colorcolumn = "80"          visible ruler at column 80
+formatoptions += tnl        t = auto-wrap by textwidth
+                            n = recognize numbered lists
+                            l = don't wrap lines that were already long
+spell       = true          spell-check on (zg to add a word, z= for suggestions)
+```
+
+Reflow an existing paragraph manually:
+
+```text
+gqap        reflow current paragraph to textwidth
+gqq         reflow current line
+gq{motion}  reflow over any motion (e.g. gqG = end of file)
+```
+
+To turn off hard wrap for one buffer: `:setlocal textwidth=0`.
+
+### Movement (prose-friendly)
 
 ```text
 j / k       move down/up by wrapped visual line

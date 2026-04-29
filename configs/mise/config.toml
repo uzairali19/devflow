@@ -2,7 +2,7 @@
 # Override per-project with a .mise.toml at the project root.
 
 [tools]
-node = "lts"
+node = "22"
 python = "3.12"
 go = "latest"
 rust = "stable"

@@ -94,3 +94,21 @@ vim.api.nvim_create_autocmd('BufReadPost', {
     end
   end,
 })
+
+-- Prose: hard-wrap on type at column 80, with a visible ruler. Soft wrap
+-- is already on globally (opt.wrap = true in options.lua); this adds the
+-- *auto-insert-newline* behavior you want when typing markdown/mdx/etc.
+-- Use `gqap` to reflow an existing paragraph manually.
+vim.api.nvim_create_autocmd('FileType', {
+  group   = aug,
+  pattern = { 'markdown', 'mdx', 'text', 'gitcommit', 'asciidoc' },
+  callback = function()
+    vim.opt_local.textwidth   = 80
+    vim.opt_local.colorcolumn = '80'
+    -- formatoptions: t = auto-wrap text by textwidth, n = recognize numbered
+    -- lists, l = don't wrap lines that were already long when entered.
+    vim.opt_local.formatoptions:append('tnl')
+    -- spell check is nice for prose; comment this out if you don't want it.
+    vim.opt_local.spell = true
+  end,
+})

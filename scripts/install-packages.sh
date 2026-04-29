@@ -18,6 +18,56 @@ TMUX_MIN_MINOR=2
 # Bumped manually when we want to roll forward.
 TMUX_SOURCE_VERSION="3.5a"
 
+# Neovim minimum: 0.11 for vim.lsp.config; the keymaps module also needs
+# vim.keymap (0.7+). apt on Ubuntu 22.04/24.04 and Debian 12 ships much
+# older versions, so we install the official tarball from GitHub releases.
+NVIM_MIN_MAJOR=0
+NVIM_MIN_MINOR=11
+
+nvim_version_ok() {
+  command -v nvim >/dev/null 2>&1 || return 1
+  local raw cleaned major minor
+  # nvim --version prints "NVIM v0.11.0" on the first line.
+  raw="$(nvim --version 2>/dev/null | head -1 | awk '{print $2}')"
+  cleaned="${raw#v}"
+  major="${cleaned%%.*}"
+  minor="${cleaned#*.}"
+  minor="${minor%%.*}"
+  [[ "$major" =~ ^[0-9]+$ && "$minor" =~ ^[0-9]+$ ]] || return 1
+  if (( major > NVIM_MIN_MAJOR )); then return 0; fi
+  if (( major == NVIM_MIN_MAJOR && minor >= NVIM_MIN_MINOR )); then return 0; fi
+  return 1
+}
+
+# Install the official Neovim release tarball into ~/.local/nvim/ and
+# link the binary into ~/.local/bin/nvim. Only called when apt's nvim
+# is too old. The system /usr/bin/nvim (if any) stays in place but is
+# shadowed by the front-of-PATH ~/.local/bin entry.
+install_nvim_official() {
+  local asset
+  case "$(uname -m)" in
+    x86_64|amd64)  asset="nvim-linux-x86_64.tar.gz" ;;
+    aarch64|arm64) asset="nvim-linux-arm64.tar.gz"  ;;
+    *)
+      warn "no official Neovim binary for arch $(uname -m); apt version will be used"
+      return 0
+      ;;
+  esac
+
+  local url="https://github.com/neovim/neovim/releases/latest/download/$asset"
+  local target="$HOME/.local/nvim"
+  mkdir -p "$HOME/.local/bin"
+
+  say "downloading official Neovim ($asset)"
+  rm -rf "$target"
+  mkdir -p "$target"
+  curl -fsSL "$url" | tar xz -C "$target" --strip-components=1
+  ln -sfn "$target/bin/nvim" "$HOME/.local/bin/nvim"
+  export PATH="$HOME/.local/bin:$PATH"
+  hash -r 2>/dev/null || true
+  say "Neovim $(nvim --version | head -1 | awk '{print $2}') installed at ~/.local/nvim/"
+}
+
 tmux_version_ok() {
   command -v tmux >/dev/null 2>&1 || return 1
   local raw cleaned major minor
@@ -99,6 +149,12 @@ install_macos() {
   else
     warn "brew tmux reports an unexpectedly old version; OSC52 may not work"
   fi
+
+  if nvim_version_ok; then
+    say "nvim $(nvim --version | head -1 | awk '{print $2}') ≥ ${NVIM_MIN_MAJOR}.${NVIM_MIN_MINOR} — OK"
+  else
+    warn "brew nvim reports an unexpectedly old version; devflow needs ≥ 0.11"
+  fi
 }
 
 install_linux_apt() {
@@ -136,6 +192,15 @@ install_linux_apt() {
     say "tmux $(tmux -V | awk '{print $2}') ≥ ${TMUX_MIN_MAJOR}.${TMUX_MIN_MINOR} — OK for OSC52"
   else
     build_tmux_from_source "$SUDO"
+  fi
+
+  # Neovim ≥ 0.11 is mandatory for our LSP/clipboard config. apt's version
+  # is too old on every current Debian/Ubuntu release; install the official
+  # release tarball into ~/.local/nvim if needed.
+  if nvim_version_ok; then
+    say "nvim $(nvim --version | head -1 | awk '{print $2}') ≥ ${NVIM_MIN_MAJOR}.${NVIM_MIN_MINOR} — OK"
+  else
+    install_nvim_official
   fi
 }
 

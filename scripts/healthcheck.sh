@@ -45,6 +45,23 @@ for tool in "${REQUIRED[@]}"; do
   fi
 done
 
+# Neovim ≥ 0.11 is required (vim.lsp.config + vim.ui.clipboard.osc52).
+# Distro apt packages are too old; install-packages.sh fetches the official
+# tarball when needed, so this is a verification step.
+if command -v nvim >/dev/null 2>&1; then
+  nvim_raw="$(nvim --version 2>/dev/null | head -1 | awk '{print $2}')"
+  nvim_clean="${nvim_raw#v}"
+  nvim_major="${nvim_clean%%.*}"
+  nvim_minor="${nvim_clean#*.}"; nvim_minor="${nvim_minor%%.*}"
+  if [[ "$nvim_major" =~ ^[0-9]+$ && "$nvim_minor" =~ ^[0-9]+$ ]] \
+     && { (( nvim_major > 0 )) || { (( nvim_major == 0 )) && (( nvim_minor >= 11 )); }; }; then
+    row "nvim ver" "${C_GREEN}${nvim_raw}${C_RESET}" "≥ 0.11 — ok"
+  else
+    row "nvim ver" "${C_RED}${nvim_raw}${C_RESET}" "< 0.11 — devflow config needs ≥ 0.11"
+    failures=$((failures + 1))
+  fi
+fi
+
 # tmux ≥ 3.2 is required for OSC52 clipboard passthrough. install-packages.sh
 # builds a recent tmux from source on Linux when apt's version is too old, so
 # this is a verification step rather than a setup step.
