@@ -169,3 +169,9 @@ fi
 
 # ---------- host-specific overrides (sourced last so it wins last) ----------
 [[ -r "$HOME/.zshrc.local" ]] && source "$HOME/.zshrc.local"
+
+# The next line updates PATH for the Google Cloud SDK.
+if [ -f '/Users/uzairali/Documents/google-cloud-sdk/path.zsh.inc' ]; then . '/Users/uzairali/Documents/google-cloud-sdk/path.zsh.inc'; fi
+
+# The next line enables shell command completion for gcloud.
+if [ -f '/Users/uzairali/Documents/google-cloud-sdk/completion.zsh.inc' ]; then . '/Users/uzairali/Documents/google-cloud-sdk/completion.zsh.inc'; fi

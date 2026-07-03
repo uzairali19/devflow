@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
-# devflow — small CLI on top of the dotfiles.
+# devflow — engineering OS CLI on top of the dotfiles.
+#
+# Design rule: never wrap a command that is already perfect (ssh, git,
+# docker). Every subcommand here combines several operations into one
+# meaningful workflow, or generates structure. Core commands live in this
+# file; command groups live in lib/*.sh and are sourced only when
+# dispatched, so `devflow help` stays instant.
 
 set -euo pipefail
 
@@ -17,31 +23,40 @@ _resolve_root() {
 DEVFLOW_ROOT="$(_resolve_root)"
 export DEVFLOW_ROOT
 
+# shellcheck source=../lib/common.sh
+source "$DEVFLOW_ROOT/lib/common.sh"
+
 cmd="${1:-help}"
 [[ $# -gt 0 ]] && shift || true
 
 usage() {
   cat <<'USAGE'
-usage:
-  devflow session [name]    new or attach tmux session (default: $PWD basename)
-  devflow sessions          list sessions
-  devflow doctor            run healthcheck
-  devflow debug             dump PATH and version-manager state for triage
-  devflow update            git pull + re-link
-  devflow path              print repo root
-  devflow help              show this
+usage: devflow <command>
+
+  daily
+    status                  project dashboard for the current directory
+                            (git, docker, TODOs, latest ADR/journal)
+    session [name]          new or attach tmux session (default: $PWD basename)
+    sessions                list tmux sessions
+    journal today           create/open journal/YYYY-MM-DD.md in the project
+    adr new "Title"         create decisions/ADR-YYYYMMDD-title.md
+    notes today             create/open ~/devflow-notes/YYYY-MM-DD.md
+
+  projects
+    project init NAME       scaffold a documented project (markdown only)
+    project open NAME       tmux session rooted at the project
+
+  servers
+    health <host>           one-shot remote health report over ssh
+                            (<host> = anything `ssh <host>` accepts)
+
+  devflow itself
+    doctor                  local toolchain healthcheck
+    debug                   dump PATH / version-manager state for triage
+    update                  git pull + re-link configs
+    path                    print repo root
+    help                    show this
 USAGE
-}
-
-require_tmux() {
-  command -v tmux >/dev/null 2>&1 || { echo "devflow: tmux not installed" >&2; exit 1; }
-}
-
-slug() {
-  printf "%s" "$1" \
-    | tr '[:upper:]' '[:lower:]' \
-    | sed -E 's/[^a-z0-9_-]+/-/g; s/^-+|-+$//g' \
-    | cut -c1-32
 }
 
 cmd_session() {
@@ -68,22 +83,132 @@ cmd_doctor() { bash "$DEVFLOW_ROOT/scripts/healthcheck.sh"; }
 cmd_debug()  { bash "$DEVFLOW_ROOT/scripts/debug-path.sh"; }
 
 cmd_update() {
-  command -v git >/dev/null 2>&1 || { echo "devflow: git required" >&2; exit 1; }
-  echo "==> git pull"
+  command -v git >/dev/null 2>&1 || die "git required"
+  log "git pull"
   git -C "$DEVFLOW_ROOT" pull --ff-only
-  echo "==> re-link configs"
+  log "re-link configs"
   bash "$DEVFLOW_ROOT/scripts/link-configs.sh"
 }
 
 cmd_path() { printf "%s\n" "$DEVFLOW_ROOT"; }
 
+# ---------- status: project dashboard ---------------------------------------
+# Inside a git repo: one screen answering "where was I, what's running,
+# what's undecided". Outside: a short devflow self-check instead.
+
+cmd_status() {
+  local root
+  if root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+    _status_project "$root"
+  else
+    warn "not inside a git project — showing devflow itself"
+    _status_devflow
+  fi
+}
+
+_status_project() {
+  local root="$1"
+  log "$(basename "$root")  ($root)"
+
+  echo
+  log "git"
+  git -C "$root" status -sb | head -12
+
+  echo
+  log "recent commits"
+  git -C "$root" log --oneline -5 2>/dev/null || echo "  (no commits yet)"
+
+  # docker — only when the project declares services via a compose file
+  local f cf=""
+  for f in compose.yaml compose.yml docker-compose.yml docker-compose.yaml; do
+    [[ -f "$root/$f" ]] && { cf="$f"; break; }
+  done
+  if [[ -n "$cf" ]]; then
+    echo
+    log "docker ($cf)"
+    (cd "$root" && docker compose ps --format 'table {{.Name}}\t{{.Status}}' 2>/dev/null) \
+      || warn "docker not reachable"
+  fi
+
+  # environment
+  echo
+  log "environment"
+  if command -v mise >/dev/null 2>&1; then
+    mise current 2>/dev/null | sed 's/^/  /' || true
+  fi
+  if [[ -f "$root/.env" ]]; then
+    if git -C "$root" check-ignore -q .env 2>/dev/null; then
+      ok ".env present (git-ignored)"
+    else
+      warn ".env present and NOT git-ignored — fix before committing"
+    fi
+  fi
+  local testcmd=""
+  if   [[ -f "$root/Makefile" ]] && grep -qE '^test:' "$root/Makefile" 2>/dev/null; then testcmd="make test"
+  elif [[ -f "$root/package.json" ]] && grep -q '"test"' "$root/package.json" 2>/dev/null; then testcmd="npm test"
+  elif [[ -d "$root/tests" || -f "$root/pytest.ini" ]]; then testcmd="pytest"
+  fi
+  [[ -n "$testcmd" ]] && printf "  tests: %s\n" "$testcmd"
+
+  # open work
+  echo
+  log "open work"
+  local todos
+  if command -v rg >/dev/null 2>&1; then
+    todos="$(rg -n 'TODO|FIXME' "$root" -g '!journal/**' -g '!.git/**' 2>/dev/null | wc -l | tr -d ' ')"
+  else
+    todos="$(grep -rn 'TODO\|FIXME' "$root" --exclude-dir=.git 2>/dev/null | wc -l | tr -d ' ')"
+  fi
+  printf "  %s TODO/FIXME marker(s)\n" "$todos"
+
+  local last_adr last_journal
+  last_adr="$(ls -1 "$root"/decisions/ADR-2*.md 2>/dev/null | sort | tail -1 || true)"
+  last_journal="$(ls -1 "$root"/journal/2*.md 2>/dev/null | sort | tail -1 || true)"
+  [[ -n "$last_adr" ]]     && printf "  latest ADR:     %s\n" "${last_adr#"$root"/}"
+  [[ -n "$last_journal" ]] && printf "  latest journal: %s\n" "${last_journal#"$root"/}"
+  [[ -z "$last_adr" && -d "$root/decisions" ]] && printf "  no ADRs yet — devflow adr new \"...\"\n"
+  [[ -z "$last_journal" && -d "$root/journal" ]] && printf "  no journal yet — devflow journal today\n"
+}
+
+_status_devflow() {
+  log "devflow @ $DEVFLOW_ROOT"
+  if git -C "$DEVFLOW_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+    printf "  %s @ %s, %s modified file(s)\n" \
+      "$(git -C "$DEVFLOW_ROOT" rev-parse --abbrev-ref HEAD)" \
+      "$(git -C "$DEVFLOW_ROOT" rev-parse --short HEAD)" \
+      "$(git -C "$DEVFLOW_ROOT" status --porcelain | wc -l | tr -d ' ')"
+  fi
+  echo
+  log "tools"
+  local t line=""
+  for t in zsh tmux nvim git fzf rg fd starship mise docker; do
+    if command -v "$t" >/dev/null 2>&1; then line+="$t ✓  "; else line+="$t ✗  "; fi
+  done
+  printf "  %s\n" "$line"
+  echo
+  printf "  run 'devflow doctor' for the full healthcheck\n"
+}
+
 case "$cmd" in
+  status)         cmd_status "$@" ;;
   session)        cmd_session "$@" ;;
   sessions|ls)    cmd_sessions ;;
-  doctor|health)  cmd_doctor ;;
+  doctor)         cmd_doctor ;;
   debug)          cmd_debug ;;
   update)         cmd_update ;;
   path|root)      cmd_path ;;
+  health)
+    # shellcheck source=../lib/health.sh
+    source "$DEVFLOW_ROOT/lib/health.sh"
+    cmd_health "$@" ;;
+  notes|journal|adr)
+    # shellcheck source=../lib/notes.sh
+    source "$DEVFLOW_ROOT/lib/notes.sh"
+    "cmd_$cmd" "$@" ;;
+  project)
+    # shellcheck source=../lib/project.sh
+    source "$DEVFLOW_ROOT/lib/project.sh"
+    cmd_project "$@" ;;
   help|-h|--help) usage ;;
   *)              usage; exit 1 ;;
 esac

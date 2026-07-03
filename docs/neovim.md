@@ -49,17 +49,26 @@ right order.
 | stevearc/conform.nvim                   | Format-on-save runner                         |
 | christoomey/vim-tmux-navigator          | `Ctrl-hjkl` across nvim splits + tmux panes   |
 
-## Treesitter: pinned to `master` (v1 stability decision)
+## Treesitter: `main` branch
 
-devflow pins `nvim-treesitter` to `branch = 'master'`. Upstream's new
-default is `main`, which is a full architectural rewrite and **does not
-expose** `require('nvim-treesitter.configs')` — the API every
-Kickstart-style config (including this one) relies on.
+devflow pins `nvim-treesitter` to `branch = 'main'`. The old `master`
+branch is frozen and only supports Neovim ≤ 0.11 — on 0.12+ its markdown
+injection directives crash the highlighter with
+`attempt to call method 'range' (a nil value)`.
 
-For v1 we want stability over staying on the bleeding edge. Migrating to
-the new `main`-branch API is a deliberate later change, not an
-accidental one. If you ever drop the pin, expect to also rewrite the
-treesitter setup block.
+`main` has a smaller API: no `require('nvim-treesitter.configs')`, no
+`auto_install`. The config installs parsers with
+`require('nvim-treesitter').install({...})` and starts highlighting per
+buffer from a `FileType` autocmd, with three guards:
+
+- `vim.g.devflow_ts_disable = { 'yaml', ... }` skips treesitter for
+  listed languages (set it in `init.lua` or live via `:lua`)
+- files over 256 KB fall back to regex highlighting
+- a missing/broken parser degrades silently (`pcall`) instead of
+  erroring on every redraw
+
+Compiling parsers requires the `tree-sitter` CLI
+(`brew install tree-sitter-cli`); `install-packages.sh` handles it.
 
 ## Languages out of the box
 
@@ -247,20 +256,26 @@ nvim --headless "+TSUpdate"    +qa
 
 ## Troubleshooting
 
-### `module 'nvim-treesitter.configs' not found`
+### Treesitter errors after a Neovim upgrade
 
-You ended up with an old checkout of nvim-treesitter's `main` branch
-(the new architecture, no `configs` module). devflow pins the plugin to
-`master`, but a previously cached checkout can be sticky. Reset it:
+Parsers are compiled against the running Neovim; after an upgrade,
+recompile them:
+
+```vim
+:TSUpdate
+```
+
+If a single language misbehaves, turn treesitter off for it without
+touching the config: add `vim.g.devflow_ts_disable = { 'thatlang' }` to
+`init.lua` (before lazy loads plugins). If parser compiles fail with
+`'tree-sitter' ENOENT`, install the CLI: `brew install tree-sitter-cli`.
+
+If the checkout itself is in a weird state, reset it:
 
 ```sh
 rm -rf ~/.local/share/nvim/lazy/nvim-treesitter
 nvim --headless "+Lazy! sync" +qa
 ```
-
-The config also wraps `require('nvim-treesitter.configs')` in `pcall`,
-so even if this happens again the rest of nvim still starts and you'll
-see a notification telling you what to run.
 
 ### Generic "lazy state looks weird"
 

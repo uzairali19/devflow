@@ -118,7 +118,9 @@ install_macos() {
     fi
   fi
 
-  local formulae=(zsh starship tmux neovim git curl fzf ripgrep fd bat eza jq tree)
+  # tree-sitter-cli: nvim-treesitter (main branch) shells out to the
+  # `tree-sitter` CLI to compile parsers.
+  local formulae=(zsh starship tmux neovim git curl fzf ripgrep fd bat eza jq tree tree-sitter-cli)
   local casks=(ghostty)
 
   say "brew update"
@@ -184,6 +186,14 @@ install_linux_apt() {
 
   if ! command -v eza >/dev/null 2>&1; then
     $SUDO apt-get install -y eza >/dev/null 2>&1 || warn "eza not in apt on this release, skipping"
+  fi
+
+  # nvim-treesitter (main branch) needs the tree-sitter CLI to compile
+  # parsers. Not packaged on older Debian/Ubuntu; fall back to npm if present.
+  if ! command -v tree-sitter >/dev/null 2>&1; then
+    $SUDO apt-get install -y tree-sitter-cli >/dev/null 2>&1 \
+      || { command -v npm >/dev/null 2>&1 && npm install -g tree-sitter-cli >/dev/null 2>&1; } \
+      || warn "tree-sitter CLI unavailable; nvim parser compiles will fail (install via npm/cargo)"
   fi
 
   # tmux ≥ 3.2 is mandatory for the OSC52 clipboard chain. apt's version is

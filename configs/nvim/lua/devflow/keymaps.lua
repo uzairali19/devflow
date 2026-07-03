@@ -56,9 +56,13 @@ map('v', 'K', ":m '<-2<CR>gv=gv")
 map({ 'n', 'v' }, '<leader>y', '"+y', { desc = 'yank to system clipboard' })
 map('n',          '<leader>Y', '"+Y')
 
--- diagnostics — Telescope LSP pickers cover the rest
-map('n', '[d',         vim.diagnostic.goto_prev,    { desc = 'prev diagnostic' })
-map('n', ']d',         vim.diagnostic.goto_next,    { desc = 'next diagnostic' })
+-- diagnostics — Telescope LSP pickers cover the rest.
+-- vim.diagnostic.jump is the 0.11+ replacement for the deprecated
+-- goto_prev/goto_next; float=true keeps the old show-message behavior.
+map('n', '[d', function() vim.diagnostic.jump({ count = -1, float = true }) end,
+  { desc = 'prev diagnostic' })
+map('n', ']d', function() vim.diagnostic.jump({ count = 1, float = true }) end,
+  { desc = 'next diagnostic' })
 map('n', '<leader>de', vim.diagnostic.open_float,   { desc = 'line diagnostics' })
 map('n', '<leader>dq', vim.diagnostic.setloclist,   { desc = 'diagnostics → loclist' })
 
@@ -68,7 +72,8 @@ local aug = vim.api.nvim_create_augroup('devflow', { clear = true })
 
 vim.api.nvim_create_autocmd('TextYankPost', {
   group = aug,
-  callback = function() vim.highlight.on_yank({ timeout = 150 }) end,
+  -- vim.hl replaced vim.highlight in 0.11; keep the fallback for 0.10.
+  callback = function() (vim.hl or vim.highlight).on_yank({ timeout = 150 }) end,
 })
 
 -- strip trailing whitespace on save (skip diff/patch)

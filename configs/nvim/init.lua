@@ -4,6 +4,15 @@
 --   keymaps.lua   non-LSP keymaps + autocmds
 --   plugins.lua   lazy.nvim spec table
 
+-- This config targets stable Neovim 0.11+ (vim.lsp.config/enable,
+-- nvim-treesitter `main` branch). Warn early on older builds instead of
+-- letting them fail with cryptic errors deeper in the config.
+if vim.fn.has('nvim-0.11') == 0 then
+  vim.schedule(function()
+    vim.notify('devflow: Neovim >= 0.11 required by this config', vim.log.levels.WARN)
+  end)
+end
+
 vim.g.mapleader      = ' '
 vim.g.maplocalleader = ' '
 vim.g.have_nerd_font = false   -- flip to true after installing a Nerd Font locally

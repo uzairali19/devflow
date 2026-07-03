@@ -159,13 +159,35 @@ gotcha worth knowing about.
 
 ## devflow command
 
+Dotfiles are the floor; the CLI is the workflow layer on top. Rule: it
+never wraps a command that's already perfect (ssh/git/docker) — every
+subcommand combines several operations or generates structure.
+
 ```text
-devflow session [name]    new or attach tmux session
-devflow sessions          list sessions
-devflow doctor            run healthcheck
-devflow update            git pull + re-link
-devflow path              print repo root
+daily
+  devflow status            project dashboard: git, docker, TODOs, latest ADR/journal
+  devflow session [name]    new or attach tmux session
+  devflow sessions          list sessions
+  devflow journal today     create/open journal/YYYY-MM-DD.md in the project
+  devflow adr new "Title"   create decisions/ADR-YYYYMMDD-title.md
+  devflow notes today       create/open ~/devflow-notes/YYYY-MM-DD.md
+
+projects
+  devflow project init NAME documented project scaffold (markdown only)
+  devflow project open NAME tmux session rooted at the project
+
+servers
+  devflow health <host>     one-shot remote health report (<host> = ssh alias)
+
+devflow itself
+  devflow doctor            run healthcheck
+  devflow debug             PATH / version-manager triage
+  devflow update            git pull + re-link
+  devflow path              print repo root
 ```
+
+Design and rationale in [`docs/v2.md`](docs/v2.md). Self-study lessons in
+[`training/`](training/).
 
 ## tmux keys
 

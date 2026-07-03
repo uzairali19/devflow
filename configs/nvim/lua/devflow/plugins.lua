@@ -37,6 +37,8 @@ return {
     config = function()
       require('oil').setup({
         default_file_explorer = true,
+        -- Dotfiles (.env, .gitignore, …) visible by default. Press `g.`
+        -- inside an Oil buffer to toggle them off/on per session.
         view_options = { show_hidden = true },
         keymaps = {
           ['q']     = 'actions.close',
@@ -67,6 +69,21 @@ return {
         defaults = {
           path_display = { 'truncate' },
           mappings = { i = { ['<C-/>'] = 'which_key' } },
+          -- Search hidden files (.env, .github/, …) but never .git itself
+          -- or node_modules. This arg list is telescope's default plus
+          -- --hidden and the two globs; it drives live_grep / grep_string.
+          vimgrep_arguments = {
+            'rg', '--color=never', '--no-heading', '--with-filename',
+            '--line-number', '--column', '--smart-case',
+            '--hidden', '--glob', '!**/.git/*', '--glob', '!**/node_modules/*',
+          },
+          -- Safety net for every picker (lua patterns, not globs).
+          file_ignore_patterns = { '^%.git/', '/%.git/', 'node_modules/' },
+        },
+        pickers = {
+          -- --hidden for the file finder too; .gitignore is still respected,
+          -- so node_modules stays out even without the patterns above.
+          find_files = { hidden = true },
         },
       })
       pcall(t.load_extension, 'fzf')
@@ -85,40 +102,51 @@ return {
   },
 
   -- ---------- treesitter ----------------------------------------------------
-  -- Pinned to master. nvim-treesitter's `main` branch is the new
-  -- architecture and drops the `nvim-treesitter.configs` module that
-  -- this spec relies on; master stays stable.
-  --
-  -- If startup ever errors with "module 'nvim-treesitter.configs' not
-  -- found", clear the cached checkout:
-  --   rm -rf ~/.local/share/nvim/lazy/nvim-treesitter
-  --   nvim --headless "+Lazy! sync" +qa
+  -- `main` branch. The old `master` branch is frozen and only supports
+  -- Neovim <= 0.11; on 0.12+ its markdown injection directives crash the
+  -- highlighter with "attempt to call method 'range' (a nil value)".
+  -- `main` has a smaller API: no `nvim-treesitter.configs`, no
+  -- `auto_install`. Highlighting is started per buffer from the FileType
+  -- autocmd below, which is also where the defensive checks live.
   {
     'nvim-treesitter/nvim-treesitter',
-    branch = 'master',
+    branch = 'main',
     build  = ':TSUpdate',
+    lazy   = false,   -- autocmd must exist before the first file loads
     config = function()
-      local ok, configs = pcall(require, 'nvim-treesitter.configs')
-      if not ok then
-        vim.schedule(function()
-          vim.notify(
-            'nvim-treesitter.configs not loadable. Try:\n' ..
-            '  rm -rf ~/.local/share/nvim/lazy/nvim-treesitter\n' ..
-            '  nvim --headless "+Lazy! sync" +qa',
-            vim.log.levels.WARN)
-        end)
-        return
-      end
+      local ts = require('nvim-treesitter')
+      ts.setup({})
 
-      configs.setup({
-        ensure_installed = {
-          'bash', 'css', 'go', 'gomod', 'html', 'javascript', 'json',
-          'lua', 'markdown', 'markdown_inline', 'python', 'rust', 'tsx',
-          'typescript', 'vim', 'vimdoc', 'yaml',
-        },
-        auto_install = true,
-        highlight    = { enable = true, additional_vim_regex_highlighting = false },
-        indent       = { enable = true },
+      -- Idempotent: already-installed parsers are skipped. Runs async.
+      -- To add a language, add it here and restart (or :TSInstall <lang>).
+      ts.install({
+        'bash', 'css', 'go', 'gomod', 'html', 'javascript', 'json',
+        'lua', 'markdown', 'markdown_inline', 'python', 'rust', 'tsx',
+        'typescript', 'vim', 'vimdoc', 'yaml',
+      })
+
+      -- Enable highlighting per buffer, defensively:
+      --   * blocklist — skip treesitter for problem filetypes without
+      --     editing this file:  vim.g.devflow_ts_disable = { 'yaml' }
+      --     (put it in init.lua before lazy, or run it live via :lua)
+      --   * files over 256 KB fall back to regex highlighting
+      --   * pcall — a missing or broken parser degrades to regex
+      --     highlighting instead of erroring on every redraw
+      vim.api.nvim_create_autocmd('FileType', {
+        group = vim.api.nvim_create_augroup('devflow-treesitter', { clear = true }),
+        callback = function(ev)
+          local lang = vim.treesitter.language.get_lang(ev.match) or ev.match
+          if vim.tbl_contains(vim.g.devflow_ts_disable or {}, lang) then return end
+
+          local name = vim.api.nvim_buf_get_name(ev.buf)
+          local stat = name ~= '' and (vim.uv or vim.loop).fs_stat(name) or nil
+          if stat and stat.size > 256 * 1024 then return end
+
+          if pcall(vim.treesitter.start, ev.buf, lang) then
+            -- treesitter-driven indentation (was `indent = { enable = true }`)
+            vim.bo[ev.buf].indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
+          end
+        end,
       })
     end,
   },
