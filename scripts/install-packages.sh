@@ -88,7 +88,7 @@ tmux_version_ok() {
 build_tmux_from_source() {
   local SUDO="${1:-}"
   say "building tmux ${TMUX_SOURCE_VERSION} from source (apt tmux too old for OSC52)"
-  $SUDO DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+  $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     libevent-dev libncurses-dev pkg-config bison make gcc
 
   local workdir
@@ -168,7 +168,7 @@ install_linux_apt() {
 
   local pkgs=(zsh tmux neovim git curl fzf ripgrep fd-find bat jq tree ca-certificates)
   say "apt-get install ${pkgs[*]}"
-  $SUDO DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${pkgs[@]}"
+  $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${pkgs[@]}"
 
   # Debian renames: fdfind -> fd, batcat -> bat
   mkdir -p "$HOME/.local/bin"

@@ -10,6 +10,13 @@ if [[ "$TERM" == "xterm-ghostty" ]] && ! infocmp xterm-ghostty >/dev/null 2>&1; 
   export TERM="xterm-256color"
 fi
 
+# Outbound ssh from Ghostty: the remote almost never has the xterm-ghostty
+# terminfo, and the fallback above only helps on hosts that run this zshrc.
+# Send a TERM every server understands instead.
+if [[ "$TERM" == "xterm-ghostty" ]]; then
+  ssh() { TERM=xterm-256color command ssh "$@"; }
+fi
+
 # ---------- PATH bootstrap (must run before mise check) ---------------------
 # Homebrew first; brew shellenv prepends /opt/homebrew/bin (or /usr/local/bin).
 if   [[ -x /opt/homebrew/bin/brew ]]; then eval "$(/opt/homebrew/bin/brew shellenv)"
