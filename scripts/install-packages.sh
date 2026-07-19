@@ -24,6 +24,12 @@ TMUX_SOURCE_VERSION="3.5a"
 NVIM_MIN_MAJOR=0
 NVIM_MIN_MINOR=11
 
+# tree-sitter CLI minimum: 0.21 added the `build` subcommand that
+# nvim-treesitter (main branch) runs to compile parsers. apt ships 0.20.x
+# on every current Debian/Ubuntu, so the official binary is installed instead.
+TREE_SITTER_MIN_MAJOR=0
+TREE_SITTER_MIN_MINOR=21
+
 nvim_version_ok() {
   command -v nvim >/dev/null 2>&1 || return 1
   local raw cleaned major minor
@@ -66,6 +72,45 @@ install_nvim_official() {
   export PATH="$HOME/.local/bin:$PATH"
   hash -r 2>/dev/null || true
   say "Neovim $(nvim --version | head -1 | awk '{print $2}') installed at ~/.local/nvim/"
+}
+
+tree_sitter_version_ok() {
+  command -v tree-sitter >/dev/null 2>&1 || return 1
+  local raw major minor
+  # tree-sitter --version prints "tree-sitter 0.25.6" (older builds may
+  # append " (sha)").
+  raw="$(tree-sitter --version 2>/dev/null | awk '{print $2}')"
+  major="${raw%%.*}"
+  minor="${raw#*.}"
+  minor="${minor%%.*}"
+  [[ "$major" =~ ^[0-9]+$ && "$minor" =~ ^[0-9]+$ ]] || return 1
+  if (( major > TREE_SITTER_MIN_MAJOR )); then return 0; fi
+  if (( major == TREE_SITTER_MIN_MAJOR && minor >= TREE_SITTER_MIN_MINOR )); then return 0; fi
+  return 1
+}
+
+# Install the official tree-sitter CLI binary into ~/.local/bin. Only called
+# when the CLI is missing or too old (apt's 0.20.x predates `tree-sitter
+# build`). An apt copy stays in place but is shadowed by front-of-PATH.
+install_tree_sitter_cli() {
+  local asset
+  case "$(uname -m)" in
+    x86_64|amd64)  asset="tree-sitter-linux-x64.gz"   ;;
+    aarch64|arm64) asset="tree-sitter-linux-arm64.gz" ;;
+    *)
+      warn "no official tree-sitter binary for arch $(uname -m); nvim parser compiles will fail"
+      return 0
+      ;;
+  esac
+
+  local url="https://github.com/tree-sitter/tree-sitter/releases/latest/download/$asset"
+  mkdir -p "$HOME/.local/bin"
+  say "downloading official tree-sitter CLI ($asset)"
+  curl -fsSL "$url" | gunzip > "$HOME/.local/bin/tree-sitter"
+  chmod +x "$HOME/.local/bin/tree-sitter"
+  export PATH="$HOME/.local/bin:$PATH"
+  hash -r 2>/dev/null || true
+  say "tree-sitter $(tree-sitter --version | awk '{print $2}') installed at ~/.local/bin/"
 }
 
 tmux_version_ok() {
@@ -188,12 +233,13 @@ install_linux_apt() {
     $SUDO apt-get install -y eza >/dev/null 2>&1 || warn "eza not in apt on this release, skipping"
   fi
 
-  # nvim-treesitter (main branch) needs the tree-sitter CLI to compile
-  # parsers. Not packaged on older Debian/Ubuntu; fall back to npm if present.
-  if ! command -v tree-sitter >/dev/null 2>&1; then
-    $SUDO apt-get install -y tree-sitter-cli >/dev/null 2>&1 \
-      || { command -v npm >/dev/null 2>&1 && npm install -g tree-sitter-cli >/dev/null 2>&1; } \
-      || warn "tree-sitter CLI unavailable; nvim parser compiles will fail (install via npm/cargo)"
+  # nvim-treesitter (main branch) compiles parsers with `tree-sitter build`,
+  # which needs CLI >= 0.21. apt ships 0.20.x on all current Debian/Ubuntu
+  # releases, so install the official release binary instead of the package.
+  if tree_sitter_version_ok; then
+    say "tree-sitter $(tree-sitter --version | awk '{print $2}') ≥ ${TREE_SITTER_MIN_MAJOR}.${TREE_SITTER_MIN_MINOR} — OK"
+  else
+    install_tree_sitter_cli
   fi
 
   # tmux ≥ 3.2 is mandatory for the OSC52 clipboard chain. apt's version is
